@@ -44,9 +44,9 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div class="form-control">
                         <label class="label">
-                            <span class="label-text">Quantity (1-100000)</span>
+                            <span class="label-text">Quantity (1-10000)</span>
                         </label>
-                        <input type="number" id="quantityInput" min="1" max="100000" value="1" class="input input-bordered">
+                        <input type="number" id="quantityInput" min="1" max="10000" value="1" class="input input-bordered">
                     </div>
                     <div class="form-control">
                         <label class="label">
@@ -144,13 +144,13 @@
         // Calculate max possible combinations based on maxDigits
         function calculateMaxPossibleIds(maxDigits) {
             if (maxDigits >= 8) {
-                return 100000; // Default high limit
+                return 10000; // Updated limit from 100000 to 10000
             }
             
             // For digits less than 8, we need to calculate the actual number of possibilities
             // For N digits (including check digit), we have 10^(N-1) possibilities
             // since the last digit is a check digit determined by the previous digits
-            return Math.pow(10, maxDigits - 1);
+            return Math.min(Math.pow(10, maxDigits - 1), 10000);
         }
         
         // Update max quantity based on selected max digits
@@ -227,10 +227,10 @@
         document.getElementById('generateBtn').addEventListener('click', async () => {
             const quantity = parseInt(document.getElementById('quantityInput').value);
             const maxDigits = parseInt(document.getElementById('maxDigitsInput').value);
-            const includeLeadingZeros = document.getElementById('leadingZerosToggle').checked;
+            const padWithZeros = document.getElementById('leadingZerosToggle').checked;
             
             // Get max allowed quantity based on max digits
-            const maxAllowed = Math.min(calculateMaxPossibleIds(maxDigits), 100000);
+            const maxAllowed = Math.min(calculateMaxPossibleIds(maxDigits), 10000);
             
             // Validate inputs
             if (quantity < 1 || quantity > maxAllowed) {
@@ -258,17 +258,39 @@
             const generatedIds = new Set();
             let attempts = 0;
             const maxAttempts = quantity * 10;
-
+            
+            // Performance optimization: Generate IDs in smaller batches
+            const batchSize = 1000;
+            let remainingToGenerate = quantity;
+            
             while (generatedIds.size < quantity && attempts < maxAttempts) {
-                const id = generateId(maxDigits, includeLeadingZeros);
-                generatedIds.add(id);
-                attempts++;
+                // Generate in smaller batches to avoid UI freezes
+                const currentBatchSize = Math.min(batchSize, remainingToGenerate);
+                let batchAttempts = 0;
+                const maxBatchAttempts = currentBatchSize * 10;
                 
-                if (attempts % 100 === 0) {
-                    const progress = (generatedIds.size / quantity) * 100;
-                    animateProgress(generateBtn, startTime, minDuration, progress, BUTTON_COLOR);
-                    await new Promise(resolve => setTimeout(resolve, 0)); // Allow UI update
+                while (generatedIds.size < quantity && batchAttempts < maxBatchAttempts) {
+                    const id = generateId(maxDigits, padWithZeros);
+                    generatedIds.add(id);
+                    batchAttempts++;
+                    attempts++;
+                    
+                    // Update progress less frequently to reduce rendering load
+                    if (batchAttempts % 200 === 0) {
+                        const progress = (generatedIds.size / quantity) * 100;
+                        animateProgress(generateBtn, startTime, minDuration, progress, BUTTON_COLOR);
+                        // Give browser a chance to process UI updates
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
                 }
+                
+                // After each batch, update progress and yield to UI thread
+                const progress = (generatedIds.size / quantity) * 100;
+                animateProgress(generateBtn, startTime, minDuration, progress, BUTTON_COLOR);
+                remainingToGenerate = quantity - generatedIds.size;
+                
+                // Ensure the UI remains responsive by yielding control
+                await new Promise(resolve => setTimeout(resolve, 10));
             }
 
             // Wait for minimum duration to complete
@@ -277,8 +299,17 @@
                 animateProgress(generateBtn, startTime, minDuration, 100, BUTTON_COLOR);
                 await sleep(minDuration - elapsedTime);
             }
-
-            resultsArea.value = Array.from(generatedIds).join('\n');
+            
+            // For large result sets, use a more efficient approach than string concatenation
+            let resultText;
+            if (generatedIds.size > 1000) {
+                // More efficient for large sets
+                resultText = Array.from(generatedIds).join('\n');
+            } else {
+                resultText = Array.from(generatedIds).join('\n');
+            }
+            
+            resultsArea.value = resultText;
             generateBtn.style.cssText = `
                 background: ${BUTTON_COLOR};
                 opacity: 1 !important;
