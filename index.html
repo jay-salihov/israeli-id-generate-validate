@@ -3,8 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="A tool to generate and validate Israeli ID numbers">
-    <title>Israeli ID Generator & Validator</title>
+    <title>Israeli ID Generator & Validator | Teudat Zehut Tool</title>
+    <meta name="description" content="Free online tool to generate and validate Israeli ID numbers (Teudat Zehut). Create valid Israeli identification numbers and check if an ID is valid.">
+    <meta name="keywords" content="Israeli ID, Teudat Zehut, ID generator, ID validator, Israel identification, Israeli ID number, check digit calculator">
+    <meta name="author" content="ID Tools">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Israeli ID Generator & Validator">
+    <meta property="og:description" content="Free online tool to generate and validate Israeli ID numbers (Teudat Zehut).">
+    <meta property="og:url" content="https://your-website.com/israeli-id-tool">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Israeli ID Generator & Validator">
+    <meta name="twitter:description" content="Free online tool to generate and validate Israeli ID numbers (Teudat Zehut).">
+    
     <link href="https://cdnjs.cloudflare.com/ajax/libs/daisyui/4.7.2/full.min.css" rel="stylesheet" type="text/css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 </head>
@@ -17,11 +32,7 @@
             <div class="card-body">
                 <h2 class="card-title mb-4">ID Validator</h2>
                 <div class="form-control">
-                    <div class="input-group">
-                        <input type="text" id="idInput" placeholder="Enter ID number" class="input input-bordered w-full" maxlength="9">
-                        <button class="btn btn-primary text-white" id="validateBtn">Validate</button>
-                    </div>
-                    <div id="validationMessage" class="mt-2 min-h-[24px]"></div>
+                    <input type="text" id="idInput" placeholder="Enter ID number" class="input input-bordered w-full" maxlength="9">
                 </div>
             </div>
         </div>
@@ -45,7 +56,7 @@
                     </div>
                     <div class="form-control">
                         <label class="label">
-                            <span class="label-text">Leading Zeros</span>
+                            <span class="label-text">Pad With Zeros</span>
                         </label>
                         <input type="checkbox" id="leadingZerosToggle" class="toggle toggle-primary" checked>
                     </div>
@@ -67,7 +78,11 @@
         document.addEventListener('DOMContentLoaded', () => {
             const generateBtn = document.getElementById('generateBtn');
             BUTTON_COLOR = window.getComputedStyle(generateBtn).backgroundColor;
+            
+            // Initialize max quantity based on max digits
+            updateMaxQuantity();
         });
+        
         // Utility Functions
         function calculateCheckDigit(baseNumber) {
             let sum = 0;
@@ -101,30 +116,97 @@
             };
         }
 
-        function generateId(maxDigits, includeLeadingZeros) {
-            const baseLength = Math.min(maxDigits, 8);
+        function generateId(maxDigits, padWithZeros) {
+            // Ensure we're generating the correct number of digits including the check digit
+            const baseLength = maxDigits - 1; // Account for check digit
             let baseNumber;
             
-            if (includeLeadingZeros) {
-                baseNumber = Math.floor(Math.random() * Math.pow(10, baseLength)).toString().padStart(8, '0');
-            } else {
+            // Generate a random number with baseLength digits (no leading zeros)
+            if (baseLength > 1) {
                 const minValue = Math.pow(10, baseLength - 1);
                 const maxValue = Math.pow(10, baseLength) - 1;
-                baseNumber = Math.floor(Math.random() * (maxValue - minValue + 1) + minValue).toString().padStart(8, '0');
+                baseNumber = Math.floor(Math.random() * (maxValue - minValue + 1) + minValue).toString();
+            } else {
+                // Handle the case where baseLength is 1
+                baseNumber = Math.floor(Math.random() * 9 + 1).toString();
             }
             
-            const checkDigit = calculateCheckDigit(baseNumber);
-            return baseNumber + checkDigit;
+            // For check digit calculation, we need to pad with zeros to reach 8 digits (Israeli ID standard)
+            const paddedBaseForChecksum = baseNumber.padStart(8, '0');
+            const checkDigit = calculateCheckDigit(paddedBaseForChecksum);
+            
+            const finalId = baseNumber + checkDigit;
+            
+            // If padWithZeros is enabled, pad to full 9 digits
+            return padWithZeros ? finalId.padStart(9, '0') : finalId;
+        }
+        
+        // Calculate max possible combinations based on maxDigits
+        function calculateMaxPossibleIds(maxDigits) {
+            if (maxDigits >= 8) {
+                return 100000; // Default high limit
+            }
+            
+            // For digits less than 8, we need to calculate the actual number of possibilities
+            // For N digits (including check digit), we have 10^(N-1) possibilities
+            // since the last digit is a check digit determined by the previous digits
+            return Math.pow(10, maxDigits - 1);
+        }
+        
+        // Update max quantity based on selected max digits
+        function updateMaxQuantity() {
+            const maxDigitsInput = document.getElementById('maxDigitsInput');
+            const quantityInput = document.getElementById('quantityInput');
+            const maxDigits = parseInt(maxDigitsInput.value);
+            
+            const maxPossible = calculateMaxPossibleIds(maxDigits);
+            const maxAllowed = Math.min(maxPossible, 100000);
+            
+            quantityInput.max = maxAllowed;
+            quantityInput.placeholder = `1-${maxAllowed}`;
+            
+            // Update the label text
+            const quantityLabel = quantityInput.previousElementSibling.querySelector('.label-text');
+            quantityLabel.textContent = `Quantity (1-${maxAllowed})`;
+            
+            // If current value exceeds new max, adjust it
+            if (parseInt(quantityInput.value) > maxAllowed) {
+                quantityInput.value = maxAllowed;
+            }
         }
 
-        // UI Event Handlers
-        document.getElementById('validateBtn').addEventListener('click', () => {
-            const id = document.getElementById('idInput').value;
+        // Validation function for ID input
+        function validateIdInput() {
+            const idInput = document.getElementById('idInput');
+            const id = idInput.value;
+            
+            // Reset border when empty
+            if (id.trim().length === 0) {
+                idInput.style.borderColor = '';
+                idInput.classList.remove('border-success', 'border-error');
+                idInput.classList.add('input-bordered');
+                return;
+            }
+            
             const result = validateId(id);
-            const messageEl = document.getElementById('validationMessage');
-            messageEl.textContent = result.message;
-            messageEl.className = result.valid ? 'text-success' : 'text-error';
-        });
+            
+            // Update border color based on validation result
+            idInput.classList.remove('input-bordered');
+            if (result.valid) {
+                idInput.classList.remove('border-error');
+                idInput.classList.add('border-success');
+                idInput.style.borderColor = '#4ade80'; // Green color
+            } else {
+                idInput.classList.remove('border-success');
+                idInput.classList.add('border-error');
+                idInput.style.borderColor = '#f87171'; // Red color
+            }
+        }
+        
+        // UI Event Handlers - Add validation on input, focus and blur
+        document.getElementById('idInput').addEventListener('input', validateIdInput);
+        document.getElementById('idInput').addEventListener('focus', validateIdInput);
+        document.getElementById('idInput').addEventListener('blur', validateIdInput);
 
         function sleep(ms) {
             return new Promise(resolve => setTimeout(resolve, ms));
@@ -147,9 +229,12 @@
             const maxDigits = parseInt(document.getElementById('maxDigitsInput').value);
             const includeLeadingZeros = document.getElementById('leadingZerosToggle').checked;
             
+            // Get max allowed quantity based on max digits
+            const maxAllowed = Math.min(calculateMaxPossibleIds(maxDigits), 100000);
+            
             // Validate inputs
-            if (quantity < 1 || quantity > 100000) {
-                alert('Please enter a quantity between 1 and 100000');
+            if (quantity < 1 || quantity > maxAllowed) {
+                alert(`Please enter a quantity between 1 and ${maxAllowed}`);
                 return;
             }
             if (maxDigits < 4 || maxDigits > 9) {
@@ -220,12 +305,18 @@
         });
 
         document.getElementById('quantityInput').addEventListener('input', function(e) {
-            this.value = Math.min(Math.max(this.value, 1), 100000);
+            const maxDigits = parseInt(document.getElementById('maxDigitsInput').value);
+            const maxAllowed = Math.min(calculateMaxPossibleIds(maxDigits), 100000);
+            this.value = Math.min(Math.max(this.value, 1), maxAllowed);
         });
 
         document.getElementById('maxDigitsInput').addEventListener('input', function(e) {
             this.value = Math.min(Math.max(this.value, 4), 9);
+            updateMaxQuantity();
         });
+
+        // Add event listener to update max quantity when max digits changes
+        document.getElementById('maxDigitsInput').addEventListener('change', updateMaxQuantity);
     </script>
 </body>
 </html>
